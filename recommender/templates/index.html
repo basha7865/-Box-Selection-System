@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Packaging & Box Management</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; }
+        h1 { text-align: center; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: 20px auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .full-width { grid-column: span 2; }
+        .form-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: center; margin-bottom: 15px; }
+        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+        button { background-color: #0066cc; color: white; border: none; padding: 9px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0052a3; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
+        .btn-danger { background-color: #d9534f; }
+        .btn-danger:hover { background-color: #c9302c; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        .btn-warning:hover { background-color: #e0a800; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .table th, .table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .table th { background-color: #f8f9fa; }
+        .result-box { margin-top: 15px; padding: 15px; border-radius: 4px; display: none; }
+    </style>
+</head>
+<body>
+
+<h1>📦 Packaging Recommender & Box Management</h1>
+
+<div class="grid">
+    <!-- BOX INVENTORY MANAGEMENT CARD -->
+    <div class="card full-width">
+        <h2>📦 Available Box Inventory (<span id="boxCount">0</span> Boxes in DB)</h2>
+        
+        <form id="addBoxForm">
+            <div class="form-row">
+                <input type="text" id="b_name" placeholder="Box Name (e.g. Large Box)" required>
+                <input type="number" step="0.1" id="b_length" placeholder="Length (cm)" required>
+                <input type="number" step="0.1" id="b_width" placeholder="Width (cm)" required>
+                <input type="number" step="0.1" id="b_height" placeholder="Height (cm)" required>
+                <input type="number" step="0.1" id="b_weight" placeholder="Max Wt (kg)" required>
+                <input type="number" step="0.01" id="b_cost" placeholder="Cost ($)" required>
+                <button type="submit" class="btn-success">+ Add Box</button>
+            </div>
+        </form>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Box Name</th>
+                    <th>Dimensions (L x W x H cm)</th>
+                    <th>Max Wt (kg)</th>
+                    <th>Cost ($)</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="boxTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- ORDER RECOMMENDATION CARD -->
+    <div class="card full-width">
+        <h2>🛒 Calculate Best Box for Order</h2>
+        <form id="addProductForm">
+            <div class="form-row" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;">
+                <input type="text" id="p_name" placeholder="Item Name" required>
+                <input type="number" step="0.1" id="p_length" placeholder="Length (cm)" required>
+                <input type="number" step="0.1" id="p_width" placeholder="Width (cm)" required>
+                <input type="number" step="0.1" id="p_height" placeholder="Height (cm)" required>
+                <input type="number" step="0.1" id="p_weight" placeholder="Weight (kg)" required>
+                <button type="submit">+ Add Item</button>
+            </div>
+        </form>
+
+        <h3>Order Items:</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item Name</th>
+                    <th>Dimensions (L x W x H cm)</th>
+                    <th>Weight (kg)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="orderTableBody"></tbody>
+        </table>
+
+        <br>
+        <button onclick="calculateBox()" style="font-size: 16px;">Calculate Best Box</button>
+        <div id="resultBox" class="result-box"></div>
+    </div>
+</div>
+
+<script>
+    let currentOrder = [];
+
+    // --- BOX MANAGEMENT FUNCTIONS ---
+    async function fetchBoxes() {
+        const res = await fetch('/api/boxes/');
+        const data = await res.json();
+        const tbody = document.getElementById('boxTableBody');
+        document.getElementById('boxCount').innerText = data.boxes.length;
+        tbody.innerHTML = '';
+        
+        if (data.boxes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: #888;">No boxes available in DB. Add one above!</td></tr>`;
+            return;
+        }
+
+        data.boxes.forEach(b => {
+            tbody.innerHTML += `
+                <tr id="box-row-${b.id}">
+                    <td><strong>${b.name}</strong></td>
+                    <td>${b.length} x ${b.width} x ${b.height} cm</td>
+                    <td>${b.max_weight} kg</td>
+                    <td>$${b.cost}</td>
+                    <td>
+                        <button class="btn-warning" onclick="editBox(${b.id}, '${b.name}', ${b.length}, ${b.width}, ${b.height}, ${b.max_weight}, ${b.cost})">Edit</button>
+                        <button class="btn-danger" onclick="deleteBox(${b.id})">Delete</button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    document.getElementById('addBoxForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+            name: document.getElementById('b_name').value,
+            length: document.getElementById('b_length').value,
+            width: document.getElementById('b_width').value,
+            height: document.getElementById('b_height').value,
+            max_weight: document.getElementById('b_weight').value,
+            cost: document.getElementById('b_cost').value
+        };
+        await fetch('/api/boxes/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        e.target.reset();
+        fetchBoxes();
+    };
+
+    function editBox(id, name, l, w, h, wt, cost) {
+        const row = document.getElementById(`box-row-${id}`);
+        row.innerHTML = `
+            <td><input type="text" id="edit-name-${id}" value="${name}"></td>
+            <td>
+                <input type="number" step="0.1" id="edit-l-${id}" value="${l}" style="width:60px;"> x 
+                <input type="number" step="0.1" id="edit-w-${id}" value="${w}" style="width:60px;"> x 
+                <input type="number" step="0.1" id="edit-h-${id}" value="${h}" style="width:60px;">
+            </td>
+            <td><input type="number" step="0.1" id="edit-wt-${id}" value="${wt}" style="width:70px;"></td>
+            <td><input type="number" step="0.01" id="edit-cost-${id}" value="${cost}" style="width:70px;"></td>
+            <td>
+                <button class="btn-success" onclick="saveBox(${id})">Save</button>
+                <button onclick="fetchBoxes()">Cancel</button>
+            </td>`;
+    }
+
+    async function saveBox(id) {
+        const payload = {
+            name: document.getElementById(`edit-name-${id}`).value,
+            length: document.getElementById(`edit-l-${id}`).value,
+            width: document.getElementById(`edit-w-${id}`).value,
+            height: document.getElementById(`edit-h-${id}`).value,
+            max_weight: document.getElementById(`edit-wt-${id}`).value,
+            cost: document.getElementById(`edit-cost-${id}`).value
+        };
+        await fetch(`/api/boxes/${id}/`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        fetchBoxes();
+    }
+
+    async function deleteBox(id) {
+        if (confirm('Delete this box from DB?')) {
+            await fetch(`/api/boxes/${id}/`, { method: 'DELETE' });
+            fetchBoxes();
+        }
+    }
+
+    // --- ORDER & RECOMMENDATION FUNCTIONS ---
+    document.getElementById('addProductForm').onsubmit = (e) => {
+        e.preventDefault();
+        currentOrder.push({
+            id: Date.now(),
+            name: document.getElementById('p_name').value,
+            length: parseFloat(document.getElementById('p_length').value),
+            width: parseFloat(document.getElementById('p_width').value),
+            height: parseFloat(document.getElementById('p_height').value),
+            weight: parseFloat(document.getElementById('p_weight').value)
+        });
+        renderOrderTable();
+        e.target.reset();
+    };
+
+    function removeOrderItem(id) {
+        currentOrder = currentOrder.filter(item => item.id !== id);
+        renderOrderTable();
+    }
+
+    function renderOrderTable() {
+        const tbody = document.getElementById('orderTableBody');
+        tbody.innerHTML = '';
+        if (currentOrder.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: #888;">No items added to order yet.</td></tr>`;
+            return;
+        }
+        currentOrder.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${item.name}</strong></td>
+                    <td>${item.length} x ${item.width} x ${item.height} cm</td>
+                    <td>${item.weight} kg</td>
+                    <td><button class="btn-danger" onclick="removeOrderItem(${item.id})">Remove</button></td>
+                </tr>`;
+        });
+    }
+
+    async function calculateBox() {
+        const resBox = document.getElementById('resultBox');
+        if (currentOrder.length === 0) {
+            alert('Please add at least one product.');
+            return;
+        }
+        const res = await fetch('/api/recommend/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ products: currentOrder })
+        });
+        const data = await res.json();
+        resBox.style.display = 'block';
+        if (res.ok && data.found) {
+            resBox.style.background = '#e6f4ea';
+            resBox.style.border = '1px solid #b7e1cd';
+            resBox.innerHTML = `
+                <h3>🎉 Recommended Box: ${data.box_name}</h3>
+                <p><strong>Cost:</strong> $${data.cost}</p>
+                <p><strong>Dimensions:</strong> ${data.dimensions}</p>
+                <p><strong>Max Capacity:</strong> ${data.max_weight} kg</p>`;
+        } else {
+            resBox.style.background = '#fce8e6';
+            resBox.style.border = '1px solid #fad2cf';
+            resBox.innerHTML = `<h3>⚠️ ${data.message || data.error}</h3>`;
+        }
+    }
+
+    // Initial load
+    fetchBoxes();
+    renderOrderTable();
+</script>
+</body>
+</html>
