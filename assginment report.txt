@@ -1,0 +1,9 @@
+Connection between Models and Views in Backend: For me, it has become apparent that accurate naming is very important in Django’s Architecture (MVT). If the name is incorrect, for example, Shipping Box named as Box in models.py and then trying to import it in views.py causes the whole project to fail due to an exception named Import Error. Therefore, I needed to find out how to trace tracebacks from urls.py to views.py.
+
+Database Manipulation Using ORM: I have gained experience working with model fields definitions which included different field types such as Char Field, Float Field, Decimal Field, etc., @property methods for some additional calculations like volume, migrations via make migrations and migrate commands.
+
+Creation of REST API Endpoints: Instead of rendering static HTML page, I have created API endpoints based on JsonResponse class. Besides, I have learned how to work with different HTTP methods – GET (to retrieve), POST (for creating new boxes), PUT (for updating) and DELETE (for deleting).
+
+Integration Frontend with Backend: Connecting frontend with the backend with the help of vanilla JavaScript became my next milestone. I have learned how to make a request using fetch() method, get JSON data and display it in DOM.
+
+Debugging/Environment: Debugging is not only about fixing bugs in the code. I understood that Python caches files and sometimes the errors occur due to unsaved changes in IDE or cached files.
